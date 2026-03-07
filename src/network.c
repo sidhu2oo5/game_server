@@ -1,5 +1,5 @@
 #include "network.h"
-#include "/protocol/protocol.h"
+#include "protocol.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -16,7 +16,8 @@ int create_socket(void){
 			sleep(1);
 		}
 	}while(fd<0);
-	return fd;	
+	return fd;
+
 }
 int create_server_socket(void){
 	int fd,opt=1;
@@ -59,11 +60,10 @@ int create_server_socket(void){
 	}
 	return fd;
 }
-int accept_socket(int fd){
+int accept_socket(int fd,struct sockaddr_in* addr){
 	int cfd;
-	struct sockaddr_in addr;
-	socklen_t addrlen=sizeof(addr);
-	cfd=accept(fd,(struct sockaddr*)&addr,&addrlen);
+	socklen_t addrlen=sizeof(struct sockaddr_in);
+	cfd=accept(fd,(struct sockaddr*)addr,&addrlen);
 	if(cfd<0) {
 		perror("Accept");
 	      	return -1;
@@ -89,7 +89,7 @@ int connect_socket(int fd){
 }
 int send_data(int fd,struct data*d){
 	const char*ptr=(const char*)d;
-	size_t len=sizeof(*d),tsent=0,sent;
+	int len=sizeof(*d),tsent=0,sent;
 	while(tsent<len){
 		sent=send(fd,ptr+tsent,len-tsent,0);
 		if(sent<0){
@@ -103,8 +103,8 @@ int send_data(int fd,struct data*d){
 }
 int receive_data(int fd,struct data*d){
 	char*ptr=(char*)d;
-	size_t len=sizeof(*d),trcv=0,rcv;
-      	while(trecv<len){
+	int len=sizeof(*d),trcv=0,rcv;
+      	while(trcv<len){
 		rcv=recv(fd,ptr+trcv,len-trcv,0);
 		if(rcv<0){
 		       if(errno==EINTR)continue;

@@ -2,7 +2,7 @@
 #include <sys/epoll.h>
 #include <stdio.h>
 #include <unistd.h>
-
+#include <stdlib.h>
 int create_epoll(void){
 	int efd=epoll_create1(0);
 	if(efd<0){
@@ -30,7 +30,7 @@ void epoll_add_client(int efd,int cfd){
 	}
 }
 void epoll_remove_client(int efd,int cfd){
-	if(epoll_ctl(efd,EPOLL_CTL_DEL,cfd,NULL)==-1){perror("Epoll Del");
+	if(epoll_ctl(efd,EPOLL_CTL_DEL,cfd,NULL)==-1)perror("Epoll Del");
 	close(cfd);
 }
 int wait_epoll(int efd,struct epoll_event*evs){
