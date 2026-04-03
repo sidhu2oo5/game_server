@@ -9,198 +9,240 @@
 #include "epoll_utils.h"
 #include "protocol.h"
 #include "game.h"
-int create_room(int fd,struct room *rooms,int aroom){
-	struct data msg;
-	rooms[aroom].creater=fd;
-	rooms[aroom].joiner=-1;
-	rooms[aroom].c_move=rooms[aroom].j_move=-1;
-	rooms[aroom].members=1;
-	msg.type=ROOM_CREATED;
-	msg.rno=aroom;
-	if(send_data(fd,&msg)<0)perror("SEND");
-	for(;aroom<MAXROOMS && rooms[aroom].members;aroom++);
-	return aroom;
+void create_room(data datum,int fd,room *rooms,int* aroom){
+	rooms[aroom[0]].type=datum.rtype;
+	rooms[aroom[0]].roles[0]=fd;
+	rooms[aroom[0]].roles[1]=-1;
+	rooms[aroom[0]].moves[0]=rooms[aroom[0]].moves[1]=-1;
+	rooms[aroom[0]].members=1;
+	datum.status=ROOM_CREATED;
+	datum.rno=aroom[0];
+	datum.role=0;
+	datum.count=1;
+	if(send_data(fd,&datum)<0)perror("SEND");
+	for(;aroom[0]<MAXROOMS && rooms[aroom[0]].members;aroom[0]++);
 }
-void join_room(int fd,struct data msg,struct room *rooms){
-	rooms[msg.rno].joiner=fd; 
-	rooms[msg.rno].members+=1;
-	msg.type=ROOM_JOINED;
-	if(send_data(fd,&msg)<0)perror("SEND");
-	msg.type=PLAYER_JOINED;
-	if(send_data(rooms[msg.rno].creater,&msg)<0)perror("SEND");
+void join_room(int fd,data datum,room *rooms){
+	if(datum.rno==-1){
+		datum.rtype=0;
+		int i;
+		for(i=0;i<MAXROOMS;i++){
+			if(rooms[i].members==1 && rooms[i].type==0){
+				datum.rno=i;
+				break;
+			}
+		}
+		if(i==MAXROOMS){
+			datum.status=ROOMS_FULL;
+			if(send_data(fd,&datum)<0)perror("SEND");
+			return;
+		}
+	}
+	else if(rooms[datum.rno].members==2){
+		datum.status=ROOM_FULL;
+		if(send_data(fd,&datum)<0)perror("SEND");
+		return;
+	}
+	rooms[datum.rno].roles[1]=fd; 
+	rooms[datum.rno].members+=1;
+	datum.rtype=rooms[datum.rno].type;	
+	datum.count=2;
+	datum.status=ROOM_JOINED;
+	datum.role=1;
+	if(send_data(fd,&datum)<0)perror("SEND");
+	datum.status=PLAYER_JOINED;
+	datum.role=0;
+	if(send_data(rooms[datum.rno].roles[0],&datum)<0)perror("SEND");
 }
-int leave_room(int fd,struct data msg,struct room*rooms,int aroom){
-	if(rooms[msg.rno].creater==fd)rooms[msg.rno].creater=rooms[msg.rno].joiner;
-	rooms[msg.rno].joiner=-1;
-	if(rooms[msg.rno].creater==-1)rooms[msg.rno].members=0;
-	if(msg.rno<aroom)aroom=msg.rno;
-	return aroom;
+void leave_room(int fd,data datum,room*rooms,int* aroom){
+	rooms[datum.rno].members-=1;
+	if(rooms[datum.rno].roles[0]==fd)rooms[datum.rno].roles[0]=rooms[datum.rno].roles[1];
+	rooms[datum.rno].roles[1]=-1;
+	if(rooms[datum.rno].roles[0]>-1){
+		datum.status=PLAYER_LEFT;
+		datum.role=0;
+		if(send_data(rooms[datum.rno].roles[0],&datum)<0)perror("SEND");	
+	}
+	if(rooms[datum.rno].roles[0]==-1){
+		rooms[datum.rno].members=0;
+		rooms[datum.rno].moves[0]=rooms[datum.rno].moves[1]=-1;
+		if(datum.rno<aroom[0])aroom[0]=datum.rno;
+	}
 }
-void send_result(struct data msg,struct room*rooms){
+void send_result(data datum,room*rooms){
 	int result;
-	result=find_winner(rooms[msg.rno].c_move,rooms[msg.rno].j_move);
-	msg.type=RESULT;
-	msg.val=-result;
-	if(send_data(rooms[msg.rno].creater,&msg)<0)perror("SEND");
-	msg.val=result;
-	if(send_data(rooms[msg.rno].joiner,&msg)<0)perror("SEND");	
-	rooms[msg.rno].j_move=rooms[msg.rno].c_move=-1;
+	result=find_winner(rooms[datum.rno].moves[0],rooms[datum.rno].moves[1]);
+	datum.status=GAME_RESULT;
+	datum.val=-result;
+	datum.role=0;
+	if(send_data(rooms[datum.rno].roles[0],&datum)<0)perror("SEND");
+	datum.val=result;
+	datum.role=1;
+	if(send_data(rooms[datum.rno].roles[1],&datum)<0)perror("SEND");	
+	rooms[datum.rno].moves[1]=rooms[datum.rno].moves[0]=-1;
 }
-void handle_opponent_move(struct data msg,struct room*rooms){
-	msg.type=OPPONENT_MOVE;
-	msg.val=rooms[msg.rno].j_move;
-	if(send_data(rooms[msg.rno].creater,&msg)<0)perror("SEND");
-	msg.val=rooms[msg.rno].c_move;
-	if(send_data(rooms[msg.rno].joiner,&msg)<0)perror("SEND");
+void handle_opponent_move(data datum,room*rooms){
+	datum.status=OPPONENT_MOVE;
+	datum.val=rooms[datum.rno].moves[1];
+	datum.role=0;
+	if(send_data(rooms[datum.rno].roles[0],&datum)<0)perror("SEND");
+	datum.val=rooms[datum.rno].moves[0];
+	datum.role=1;
+	if(send_data(rooms[datum.rno].roles[1],&datum)<0)perror("SEND");
 }
-void handle_player_move(int fd,struct data msg,struct room*rooms){
-	if(rooms[msg.rno].creater==fd){
-		rooms[msg.rno].c_move=msg.val;
-		if(rooms[msg.rno].j_move>-1){
-			handle_opponent_move(msg,rooms);
-			send_result(msg,rooms);
-		}
+void handle_player_move(data datum,room*rooms){
+	rooms[datum.rno].moves[datum.role]=datum.val;
+	if(rooms[datum.rno].moves[!(datum.role)]>-1){
+		handle_opponent_move(datum,rooms);
+		send_result(datum,rooms);
 	}
-	else if(rooms[msg.rno].joiner==fd){
-		rooms[msg.rno].j_move=msg.val;
-		if(rooms[msg.rno].c_move>-1){
-			handle_opponent_move(msg,rooms);
-			send_result(msg,rooms);
-		}
-	}	
 }
-int game_aftermath(struct data msg,struct room*rooms,int aroom){
-	int result;
-	result=(rooms[msg.rno].c_move==rooms[msg.rno].j_move)?1:0;
-	if(result){
-		if(msg.val==LEAVE_ROOM){
-			msg.type=LEAVE_ROOM;
-			if(send_data(rooms[msg.rno].creater,&msg)<0)perror("SEND");
-			if(send_data(rooms[msg.rno].joiner,&msg)<0)perror("SEND");
-			rooms[msg.rno].creater=rooms[msg.rno].joiner=-1;
-			rooms[msg.rno].c_move=rooms[msg.rno].j_move=-1;
-			rooms[msg.rno].members=0;
-			if(msg.rno<aroom)aroom=msg.rno;
-		}
-		else if(msg.val==REMATCH){
-			msg.type=REMATCH_ACCEPT;
-			if(send_data(rooms[msg.rno].creater,&msg)<0)perror("SEND");
-			if(send_data(rooms[msg.rno].joiner,&msg)<0)perror("SEND");	
-			rooms[msg.rno].c_move=rooms[msg.rno].j_move=-1;
-		}
-	}
-	else{
-		msg.type=REMATCH;
-		if(rooms[msg.rno].c_move==LEAVE_ROOM){
-			if(send_data(rooms[msg.rno].creater,&msg)<0)perror("SEND");
-		}
-		else if(rooms[msg.rno].j_move==LEAVE_ROOM){
-			if(send_data(rooms[msg.rno].joiner,&msg)<0)perror("SEND");
-		}
-	}
-	return aroom;
+void handle_rematch_request(data datum,room*rooms){
+	datum.role=!(datum.role);
+	if(send_data(rooms[datum.rno].roles[datum.role],&datum)<0)perror("SEND");
 }
-int handle_game_aftermath(int fd,struct data msg,struct room*rooms,int aroom){
-	if(rooms[msg.rno].creater==fd){
-		rooms[msg.rno].c_move=msg.val;
-		if(rooms[msg.rno].j_move>-1)aroom=game_aftermath(msg,rooms,aroom);
-	}
-	else if(rooms[msg.rno].joiner==fd){
-		rooms[msg.rno].j_move=msg.val;
-		if(rooms[msg.rno].c_move>-1)aroom=game_aftermath(msg,rooms,aroom);
-	}
-	return aroom;
+void handle_rematch_accept(data datum,room*rooms){
+	datum.status=REMATCH_ACCEPTED;
+	datum.role=!(datum.role);
+	if(send_data(rooms[datum.rno].roles[datum.role],&datum)<0)perror("SEND");
+	rooms[datum.rno].moves[0]=rooms[datum.rno].moves[1]=-1;
 }
-void handle_rematch_accept(int fd,struct data msg,struct room*rooms){
-	if(rooms[msg.rno].creater==fd){
-		if(send_data(rooms[msg.rno].joiner,&msg)<0)perror("SEND");
-	}
-	else if(rooms[msg.rno].joiner==fd){
-		if(send_data(rooms[msg.rno].creater,&msg)<0)perror("SEND");
-	}
-	rooms[msg.rno].c_move=rooms[msg.rno].j_move=-1;
+void handle_rematch_decline(data datum,room*rooms){
+	datum.status=REMATCH_DECLINED;
+	datum.role=!(datum.role);
+	if(send_data(rooms[datum.rno].roles[datum.role],&datum)<0)perror("SEND");
 }
-void handle_rematch_decline(int fd,struct data msg,struct room*rooms){
-	if(rooms[msg.rno].creater==fd){
-		if(send_data(rooms[msg.rno].joiner,&msg)<0)perror("SEND");		
-		rooms[msg.rno].creater=rooms[msg.rno].joiner;
+void change_room_privacy(data datum,room*rooms){
+	rooms[datum.rno].type=!(rooms[datum.rno].type);
+	datum.rtype=rooms[datum.rno].type;
+	datum.status=ROOM_PRIVACY_CHANGED;
+	datum.role=0;
+	if(send_data(rooms[datum.rno].roles[0],&datum)<0)perror("SEND");
+	if(rooms[datum.rno].roles[1]>-1){
+		datum.role=1;
+		if(send_data(rooms[datum.rno].roles[1],&datum)<0)perror("SEND");
 	}
-	else if(rooms[msg.rno].joiner==fd){
-		if(send_data(rooms[msg.rno].creater,&msg)<0)perror("SEND");
-	}
-	rooms[msg.rno].c_move=rooms[msg.rno].j_move=-1;
-	rooms[msg.rno].joiner=-1;
-	rooms[msg.rno].members-=1;
 }
-int handle_client_request(int fd,struct data msg,struct room*rooms,int aroom){
-	switch(msg.type){
-		case CREATE_ROOM:
+void handle_player_ready(data datum,room*rooms){
+	datum.role=0;
+	if(send_data(rooms[datum.rno].roles[0],&datum)<0)perror("SEND");
+}
+void handle_game_start(data datum,room*rooms){
+	datum.role=0;
+	if(send_data(rooms[datum.rno].roles[0],&datum)<0)perror("SEND");
+	datum.role=1;
+	if(send_data(rooms[datum.rno].roles[1],&datum)<0)perror("SEND");
+}
+void handle_client_request(int fd,data datum,room*rooms,int* aroom){
+	switch(datum.status){
+		case ROOM_CREATE:
 		{
-			aroom=create_room(fd,rooms,aroom);
+			create_room(datum,fd,rooms,aroom);
 			break;
 		}
-		case JOIN_ROOM:
+		case ROOM_JOIN:
 		{
-			join_room(fd,msg,rooms);
+			join_room(fd,datum,rooms);
 			break;
 		}
-		case LEAVE_ROOM:
+		case ROOM_LEAVE:
 		{
-			aroom=leave_room(fd,msg,rooms,aroom);
+			leave_room(fd,datum,rooms,aroom);
+			break;
+		}
+		case ROOM_PRIVACY_CHANGE:
+		{
+			change_room_privacy(datum,rooms);
+			break;
+		}
+		case PLAYER_READY:
+		{
+			handle_player_ready(datum,rooms);
+			break;
+		}
+		case GAME_START:
+		{
+			handle_game_start(datum,rooms);
 			break;
 		}
 		case PLAYER_MOVE:
 		{	
-			handle_player_move(fd,msg,rooms);
+			handle_player_move(datum,rooms);
 			break;
 		}	
-		case GAME_AFTERMATH:
+		case REMATCH_REQUEST:
 		{
-			aroom=handle_game_aftermath(fd,msg,rooms,aroom);
+			handle_rematch_request(datum,rooms);
 			break;
 		}
 		case REMATCH_ACCEPT:
 		{
-			handle_rematch_accept(fd,msg,rooms);
+			handle_rematch_accept(datum,rooms);
 			break;
 		}
 		case REMATCH_DECLINE:
 		{	
-			handle_rematch_decline(fd,msg,rooms);
+			handle_rematch_decline(datum,rooms);
+			break;
+		}
+		default:
+		{
 			break;
 		}
 	}
-	return aroom;
 }
-void accept_client(int sfd,int efd){
+int accept_client(int sfd,int efd){
 	int cfd;
 	struct sockaddr_in* addr=(struct sockaddr_in*)malloc(sizeof(struct sockaddr_in));
 	cfd=accept_socket(sfd,addr);
-	epoll_add_client(efd,cfd);
+	epoll_add_socket(efd,cfd);
 	time_t now=time(NULL);
 	printf("\n[LOG]client(%d) connected from %s:%d at %s",cfd,inet_ntoa(addr->sin_addr),ntohs(addr->sin_port),ctime(&now));
 	free(addr);
+	return cfd;
+}
+int find_client(int cfd,data*datum,room*rooms){
+	for(int i=0;i<MAXROOMS;i++){
+		if(rooms[i].roles[0]==cfd || rooms[i].roles[1]==cfd){
+			datum->rno=i;
+			datum->role=(cfd==rooms[i].roles[1]);
+			return i;
+		}
+	}
+	return -1;
+}
+void handle_client_disconnect(int efd,int cfd,room*rooms,int*aroom){
+	data datum;
+	if(find_client(cfd,&datum,rooms)>-1)leave_room(cfd,datum,rooms,aroom);
+	epoll_remove_client(efd,cfd);
+}
+void handle_client_connection(int sfd,int efd){
+	data datum;
+	int fd=accept_client(sfd,efd);
+	datum.status=SERVER_CONNECTED;
+	if(send_data(fd,&datum)<0)perror("SEND");
 }
 void run_server(){
 	int serverfd,epollfd,nfds,rec;
-	struct data msg;
+	data datum;
 	struct epoll_event evs[MAXEVENTS];
-	struct room rooms[MAXROOMS]={0};
+	room rooms[MAXROOMS]={0};
 	int aroom=0;
 
 	epollfd=create_epoll();
 	serverfd=create_server_socket();
-	epoll_add_server(epollfd,serverfd);
+	epoll_add(epollfd,serverfd);
+	printf("\nSERVER STARTED\n");
 
 	while(1){
 		nfds=wait_epoll(epollfd,evs);
 		for(int i=0;i<nfds;i++){
-			if(evs[i].data.fd==serverfd)accept_client(serverfd,epollfd);
-			else if(evs[i].events & (EPOLLHUP|EPOLLERR|EPOLLRDHUP))epoll_remove_client(epollfd,evs[i].data.fd);
+			if(evs[i].data.fd==serverfd)handle_client_connection(serverfd,epollfd);
+			else if(evs[i].events & (EPOLLHUP|EPOLLERR|EPOLLRDHUP))handle_client_disconnect(epollfd,evs[i].data.fd,rooms,&aroom);
 			else{
-				if((rec=receive_data(evs[i].data.fd,&msg))<0)perror("RECEIVE");
-				if(!rec)epoll_remove_client(epollfd,evs[i].data.fd);
-				else aroom=handle_client_request(evs[i].data.fd,msg,rooms,aroom);
+				if((rec=receive_data(evs[i].data.fd,&datum))<0)perror("RECEIVE");
+				if(!rec)handle_client_disconnect(epollfd,evs[i].data.fd,rooms,&aroom);
+				else handle_client_request(evs[i].data.fd,datum,rooms,&aroom);
 			}
 		}
 	}

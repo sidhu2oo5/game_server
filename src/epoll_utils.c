@@ -11,21 +11,21 @@ int create_epoll(void){
 	}
 	return efd;
 }
-void epoll_add_server(int efd,int sfd){
+void epoll_add(int efd,int sfd){
 	struct epoll_event ev;
 	ev.events=EPOLLIN;
 	ev.data.fd=sfd;
 	if(epoll_ctl(efd,EPOLL_CTL_ADD,sfd,&ev)==-1){
-		perror("Epoll Add Server Socket");
+		perror("Epoll Add");
 		exit(EXIT_FAILURE);
 	}
 }
-void epoll_add_client(int efd,int cfd){
+void epoll_add_socket(int efd,int cfd){
 	struct epoll_event ev;
 	ev.events=EPOLLIN|EPOLLHUP|EPOLLERR|EPOLLRDHUP;
 	ev.data.fd=cfd;
 	if(epoll_ctl(efd,EPOLL_CTL_ADD,cfd,&ev)==-1){
-		perror("Epoll Add Client Socket");
+		perror("Epoll Add Socket");
 		close(cfd);
 	}
 }

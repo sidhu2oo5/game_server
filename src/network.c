@@ -1,5 +1,5 @@
-#include "network.h"
 #include "protocol.h"
+#include "network.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -87,7 +87,7 @@ int connect_socket(int fd){
 	}while(stat);
 	return 0;
 }
-int send_data(int fd,struct data*d){
+int send_data(int fd,data*d){
 	const char*ptr=(const char*)d;
 	int len=sizeof(*d),tsent=0,sent;
 	while(tsent<len){
@@ -101,7 +101,7 @@ int send_data(int fd,struct data*d){
 	}
 	return len;
 }
-int receive_data(int fd,struct data*d){
+int receive_data(int fd,data*d){
 	char*ptr=(char*)d;
 	int len=sizeof(*d),trcv=0,rcv;
       	while(trcv<len){
