@@ -1,71 +1,139 @@
-# Multiplayer Event-Driven Server
+# 🚀 Event-Driven Multiplayer Game Server (C + epoll)
 
-A client–server application written in **C** that enables real-time multiplayer interaction using **TCP sockets and Linux epoll**.  
-The server uses an **event-driven architecture** to efficiently handle multiple concurrent client connections and manage multiple independent two-player rooms.
+A high-performance **client–server multiplayer application** built in **C**, using **TCP sockets** and **Linux epoll** for efficient event-driven I/O.
 
----
-
-## Features
-
-- Event-driven server using **Linux epoll**
-- **TCP client–server communication**
-- **Multi-room two-player session management**
-- Custom message protocol for structured client-server communication
-- Reliable networking layer with **partial send/receive handling**
-- Support for **room creation, joining, gameplay, rematch, and leaving rooms**
-- Modular design separating **networking, event handling, and game logic**
+This project demonstrates low-level systems programming, networking, and real-time communication by implementing a **two-player game server with room management and matchmaking logic**.
 
 ---
 
-## Workflow
+## 📌 Features
 
-- Clients connect to the server via **TCP**
-- The server monitors connections using **epoll**
-- Players can **create or join rooms**
-- Each room supports **two players interacting in real-time**
-- The server processes moves and sends results to both players
-
----
-
-## Project Structure
-
-client.c Client entry point
-server.c Server event loop and request handling
-network.c Socket utilities and send/receive logic
-epoll_utils.c epoll helper functions
-game.c Game logic implementation
-error_handle.c Input validation utilities
+* ⚡ **Event-driven architecture** using Linux `epoll`
+* 🌐 **TCP client-server communication**
+* 🧩 **Multi-room system** (supports multiple concurrent games)
+* 🎮 Real-time **two-player gameplay**
+* 🔁 **Rematch system**
+* 🧠 Custom **binary protocol design**
+* 📡 Reliable networking with **partial send/receive handling**
+* 🧱 Modular code structure (network, game, server, client)
 
 ---
 
-## Technologies Used
+## 🧠 Architecture Overview
 
-- C
-- Linux
-- TCP/IP Socket Programming
-- epoll (I/O multiplexing)
+```
+Client  <----TCP---->  Server (epoll-based event loop)
+                         │
+                         ├── Room Management
+                         ├── Game Logic
+                         └── Protocol Handling
+```
+
+* The server uses **epoll** to handle multiple clients efficiently.
+* Each room supports **exactly 2 players**.
+* Communication is handled via a **custom protocol (`data` struct)**.
 
 ---
 
-## Build Instructions
+## 📂 Project Structure
 
+```
+.
+├── client.c          # Client entry point
+├── server.c          # Server event loop
+├── network.c         # Socket + send/receive logic
+├── epoll_utils.c     # epoll helper functions
+├── game.c            # Game logic (Rock-Paper-Scissors)
+├── error_handle.c    # Input validation
+├── protocol.h        # Message protocol definition
+├── include/          # Header files
+└── README.md
+```
+
+---
+
+## ⚙️ Technologies Used
+
+* **C (C99)**
+* **Linux System Programming**
+* **TCP/IP Sockets**
+* **epoll (I/O multiplexing)**
+
+---
+
+## 🛠️ Build Instructions
+
+```bash
 make
+```
 
 ---
 
-## Running the Application
+## ▶️ Running the Application
 
-Start the server:
+### Start Server
 
+```bash
 ./bin/gameserver
+```
 
-Start the client:
+### Start Client
 
+```bash
 ./bin/gameclient
+```
 
 ---
 
-## Possible Improvements
+## 🎮 Gameplay Flow
 
-- Automatic matchmaking system
-- Timeout handling for inactive players
+1. Client connects to server
+2. Player:
+
+   * Creates a room OR joins one
+3. Two players enter a room
+4. Players mark ready → game starts
+5. Both submit moves (Rock / Paper / Scissors)
+6. Server computes result and sends outcome
+7. Players can:
+
+   * Rematch
+   * Leave room
+
+---
+
+## ⚡ Key Highlights
+
+* Uses **epoll instead of threads** → scalable & efficient
+* Handles **partial TCP sends/receives correctly**
+* Implements a **state machine-based protocol**
+* Clean **modular separation of concerns**
+
+---
+
+## ⚠️ Limitations
+
+* CLI-based UI (basic user experience)
+* Localhost configuration 
+
+---
+
+## 🚀 Future Improvements
+
+* ⏱️ Timeout handling for inactive players
+* 🧾 Player usernames & scoreboard
+* 💬 In-game chat
+* 📊 Performance benchmarking (load testing)
+
+---
+
+## 📈 Learning Outcomes
+
+This project demonstrates:
+
+* Systems-level programming in C
+* Event-driven server design
+* Socket programming and networking fundamentals
+* Designing scalable and modular backend systems
+
+---
